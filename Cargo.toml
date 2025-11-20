@@ -1,0 +1,55 @@
+[package]
+name = "tect"
+version = "0.1.0"
+edition = "2024"
+description = "A open games"
+keywords = ["tect"]
+license = "MIT OR Apache-2.0"
+rust-version = "1.88.0"
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+# [workspace.lints.rust]
+# missing_docs = "warn"
+# unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docsrs_dep)'] }
+# unsafe_code = "deny"
+# unsafe_op_in_unsafe_fn = "warn"
+# unused_qualifications = "warn"
+
+
+[workspace.lints.clippy]
+
+
+[lints.clippy]
+
+
+[lints.rust]
+
+
+[features]
+
+
+[dependencies]
+tracing = { version = "0.1", default-features = false, optional = true }
+tect_app = { path = "crates/tect_app", version = "0.1.0", default-features = false }
+tect_ui = { path = "crates/tect_ui", version = "0.1.0", default-features = false }
+tect_world = { path = "crates/tect_world", version = "0.1.0", default-features = false }
+tect_systems = { path = "crates/tect_systems", version = "0.1.0", default-features = false }
+tect_bevy = { path = "crates/tect_bevy", version = "0.1.0", default-features = false }
+rand = "0.9.0"
+rand_chacha = "0.9.0"
+ron = "0.11"
+flate2 = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.140"
+bytemuck = "1"
+crossbeam-channel = "0.5.0"
+argh = "0.1.12"
+thiserror = "2.0"
+anyhow = "1"
+bevy = "0.17"
+
+
+[dev-dependencies]
