@@ -38,6 +38,7 @@ tect_ui = { path = "crates/tect_ui", version = "0.1.0", default-features = false
 tect_world = { path = "crates/tect_world", version = "0.1.0", default-features = false }
 tect_systems = { path = "crates/tect_systems", version = "0.1.0", default-features = false }
 tect_bevy = { path = "crates/tect_bevy", version = "0.1.0", default-features = false }
+tect_control = { path = "crates/tect_control", version = "0.1.0", default-features = false }
 rand = "0.9.0"
 rand_chacha = "0.9.0"
 ron = "0.11"
