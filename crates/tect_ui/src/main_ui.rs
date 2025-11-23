@@ -1,5 +1,6 @@
 ///主菜单界面
 use bevy::prelude::*;
+use tect_state::app_state::*;
 
 pub struct MainUiPlugin;
 
@@ -30,13 +31,14 @@ pub struct MenuBkCm {
     pub bk_entity: Entity,
 }
 
+
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // let font_handle = asset_server.load("fonts/FiraSans-Bold.ttf");
 
     commands.spawn(Camera2d);
 
     //游戏菜单按钮
-    let options = ["NEW GEANE", "CONTINUE GAME", "NETWORK", "SETING", "ABOUT"];
+    let options = ["NEW GEANE", "CONTINUE GAME", "ONLINE GAME", "SETING", "ABOUT"];
 
     // 游戏背景图片
     let bk = commands
