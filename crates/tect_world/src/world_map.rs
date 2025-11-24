@@ -1,12 +1,14 @@
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 use std::f32::consts::PI;
+use tect_camera::god_view_camera::{GodViewCamera, GodViewCameraPlugin,calculate_rotation};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
+
 pub struct WorldScenePlugin;
 
 impl Plugin for WorldScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MoveControlPlugin)
+        app.add_plugins((MoveControlPlugin, GodViewCameraPlugin))
             .add_systems(Startup, setup);
     }
 }
@@ -37,10 +39,22 @@ fn setup(
         )],
     ));
 
+    let camera_data = GodViewCamera::default();
+
+    // 初始化时，根据默认 Yaw 和 Pitch 计算 Transform
+    let rotation = calculate_rotation(0.0, camera_data.default_pitch);
+    let translation = camera_data.focus + rotation * Vec3::new(0.0, 0.0, camera_data.distance);
     // camera
     commands.spawn((
+        // Camera3d::default(),
+        // Transform::from_xyz(0.0, 6.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
         Camera3d::default(),
-        Transform::from_xyz(0.0, 6.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform {
+            translation,
+            rotation,
+            ..default()
+        },
+        camera_data,
     ));
 
     // 角色
@@ -64,3 +78,4 @@ fn setup(
         Ground,
     ));
 }
+
