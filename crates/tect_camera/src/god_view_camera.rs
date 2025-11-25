@@ -1,6 +1,7 @@
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel}, prelude::*, time::Stopwatch, window::{CursorGrabMode, CursorOptions, PrimaryWindow}
 };
+use tect_state::app_state::*;
 
 // --- 1. 组件、资源和常量定义 ---
 
@@ -33,16 +34,10 @@ impl Default for GodViewCamera {
 /// 必须是 Resource 或 Local，这里使用 Local 状态，因为它只在 `camera_right_drag_rotate` 系统中使用。
 #[derive(Default, Resource)]
 struct CameraRotateState {
-    /// 是否正在按住右键拖动
-    dragging: bool,
     /// 旋转模式下的 Yaw 角（绕 Y 轴）
     yaw: f32,
     /// 旋转模式下的 Pitch 角（绕 X 轴）
     pitch: f32,
-    /// 记录右键按下的计时器
-    press_timer: Stopwatch, 
-    /// 标记右键是否处于“刚刚按下，等待判定”的状态
-    awaiting_drag_start: bool,
 }
 
 const EDGE_PAN_THRESHOLD: f32 = 0.005; // 窗口边缘 0.05% 触发平移
@@ -127,8 +122,12 @@ fn camera_edge_pan(
     time: Res<Time>,
     // 检查右键是否被按下，如果按下则不进行边缘平移
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    // 引入 RightMouseAction 资源
+    right_mouse_action: Res<RightMouseAction>,
 ) {
-    if mouse_buttons.pressed(MouseButton::Right) {
+
+        // 只有在右键未按下且未处于拖动状态时才进行边缘平移
+    if mouse_buttons.pressed(MouseButton::Right) || *right_mouse_action == RightMouseAction::CameraDrag {
         return;
     }
 
@@ -172,105 +171,114 @@ fn camera_edge_pan(
     }
 }
 
-// --- 6. Update 系统：右键拖动改变视角（环绕） ---
-///该系统和右键点击控制角色移动有冲出，当鼠标右键按下时角色已经移动，应存在一个状态控制视角拖动与角色移动进行互斥，通过判定之后
-/// 指挥运行其中一个系统
+
+// --- 6. Update 系统：右键拖动改变视角（环绕）或判定动作 ---
+/// 该系统负责判定右键是拖动 (CameraDrag) 还是点击 (CharacterMove)，并执行 CameraDrag 动作。
 fn camera_right_drag_rotate(
     mut state: ResMut<CameraRotateState>, 
-    mut camera_query: Query<(&mut GodViewCamera, &Transform)>,
+    mut right_mouse_action: ResMut<RightMouseAction>, // 共享状态
+    mut decision_timer: ResMut<DragDecisionTimer>, // 决策计时器
+    camera_query: Query<(&GodViewCamera, &Transform)>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut cursors: Single<&mut CursorOptions>,
-    time: Res<Time>, // 引入 Time 资源用于更新计时器
+    time: Res<Time>,
 ) {
 
-    let (camera, transform) = match camera_query.single_mut() {
-        Ok(t) => (t.0, t.1),
+    let (camera, transform) = match camera_query.single() {
+        Ok(t) => t,
         Err(_) => return,
     };
-       
+
     // 累积鼠标移动的 delta
     let delta: Vec2 = mouse_motion.read().map(|e| e.delta).sum();
     
-    // --- 逻辑 A: 处理右键按下/等待 ---
-
-    if mouse_buttons.just_pressed(MouseButton::Right) {
-        // 1. 启动等待状态
-        state.awaiting_drag_start = true;
-        state.press_timer.reset(); // 重置计时器
-        state.press_timer.unpause();
-    }
-    
-    if state.awaiting_drag_start {
-        // 2. 更新计时器
-        state.press_timer.tick(time.delta());
+    match *right_mouse_action {
+        RightMouseAction::None => {
+            // --- 逻辑 A: 处理右键按下/启动等待 ---
+            if mouse_buttons.just_pressed(MouseButton::Right) {
+                // 1. 启动等待状态
+                *right_mouse_action = RightMouseAction::AwaitingDecision;
+                decision_timer.0.reset(); // 重置计时器
+                decision_timer.0.unpause();
+            }
+        }
         
-        // 3. 检查是否达到时间或移动阈值
-        let moved_enough = delta.length() > DRAG_THRESHOLD_DISTANCE;
-        let timed_out = state.press_timer.elapsed_secs() >= DRAG_THRESHOLD_TIME;
+        RightMouseAction::AwaitingDecision => {
+            // 2. 更新计时器
+            decision_timer.0.tick(time.delta());
+            
+            // 3. 检查是否达到时间或移动阈值
+            let moved_enough = delta.length() > DRAG_THRESHOLD_DISTANCE;
+            let timed_out = decision_timer.0.elapsed_secs() >= DRAG_THRESHOLD_TIME;
+            
+            if moved_enough {
+                // 如果鼠标已移动，判定为拖动意图，进入拖动模式
+                *right_mouse_action = RightMouseAction::CameraDrag;
+                
+                // 初始化拖动状态
+                let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+                state.yaw = yaw;
+                state.pitch = pitch;
+                
+                // 捕获光标
+                cursors.grab_mode = CursorGrabMode::Confined;
+                cursors.visible = false;
+                
+                decision_timer.0.pause();
+                
+            } else if timed_out && mouse_buttons.pressed(MouseButton::Right) {
+                // 如果时间到了但鼠标没怎么动，且右键仍按着，仍视为拖动/按下状态，保持 AwaitingDecision，直到松开
+                // 注意：这里需要更精细的逻辑来防止计时器超时后进入无限 AwaitingDecision 循环。
+                // 简化处理：如果超时且未移动，将其视为拖动失败，但继续等待松开。
+                // 另一种策略：超时即为点击，但我们需要等到松开。
+                // 这里的逻辑是：如果计时器超时，我们认为它不再是“快速点击”的候选者。
+                // 最佳处理：在 mouse_button_system 中处理 released 时的快速点击判定。
+            }
+            
+            // --- 逻辑 B: 处理右键松开 (在等待状态下) ---
+            if mouse_buttons.just_released(MouseButton::Right) {
+                decision_timer.0.pause();
+                
+                // 如果在计时结束前松开，判定为“点击/平移”操作
+                *right_mouse_action = RightMouseAction::CharacterMove;
+                
+                // 角色移动系统将在下一个 Update 周期处理 CharacterMove 状态
+            }
+        }
         
-        if moved_enough || timed_out {
-            // 如果时间到或鼠标已移动，则判定为拖动意图，进入拖动模式
-            
-            // 停止等待
-            state.awaiting_drag_start = false;
-            state.press_timer.pause();
-            
-            // 切换到拖动状态 (与旧版的开始拖动逻辑相同)
-            state.dragging = true;
-            let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-            state.yaw = yaw;
-            state.pitch = pitch;
-            
-            // 捕获光标 (延迟后才隐藏光标)
-            cursors.grab_mode = CursorGrabMode::Confined;
-            cursors.visible = false;
+        RightMouseAction::CameraDrag => {
+            // --- 逻辑 C: 更新拖动中状态 ---
+            if mouse_buttons.just_released(MouseButton::Right) {
+                // 5. 如果处于拖动模式下松开，则结束拖动
+                *right_mouse_action = RightMouseAction::None;
+                
+                // 还原到上帝视角默认俯仰角
+                state.pitch = camera.default_pitch; 
+                
+                // 释放光标
+                cursors.grab_mode = CursorGrabMode::None;
+                cursors.visible = true;
+                
+            } else {
+                // 累积拖动中产生的 delta
+                if delta != Vec2::ZERO {
+                    state.yaw -= delta.x * camera.sensitivity;
+                    state.pitch += delta.y * camera.sensitivity;
+                    state.pitch = state.pitch.clamp(
+                        -std::f32::consts::FRAC_PI_2 + 0.01,
+                        -0.01,
+                    );
+                }
+            }
         }
-    }
-    
-    // --- 逻辑 B: 处理右键松开 ---
-
-    if mouse_buttons.just_released(MouseButton::Right) {
-        state.press_timer.pause();
         
-        if state.awaiting_drag_start {
-            // 4. 如果在计时结束前松开，则认为是“点击/平移”操作
-            state.awaiting_drag_start = false;
-            
-            // ⚠️ 注意: 在这里，您可以选择触发一个“平移命令”或“单位命令”。
-            // 由于相机平移由 `camera_edge_pan` 或其他系统处理，这里不做额外动作。
-            // 确保不捕获光标，光标状态不变。
-            return;
+        RightMouseAction::CharacterMove => {
+            // 移动系统将在这一帧处理完成后，将状态重置回 None
         }
-
-        if state.dragging {
-            // 5. 如果处于拖动模式下松开，则结束拖动
-            state.dragging = false;
-            
-            // 还原到上帝视角默认俯仰角
-            state.pitch = camera.default_pitch; 
-            
-            // 释放光标
-            cursors.grab_mode = CursorGrabMode::None;
-            cursors.visible = true;
-        }
-    }
-    
-    // --- 逻辑 C: 更新拖动中状态 ---
-
-    if state.dragging {
-        // 累积拖动中产生的 delta
-        if delta != Vec2::ZERO {
-            state.yaw -= delta.x * camera.sensitivity;
-            state.pitch += delta.y * camera.sensitivity;
-            state.pitch = state.pitch.clamp(
-                -std::f32::consts::FRAC_PI_2 + 0.01,
-                -0.01,
-            );
-        }
+        
     }
 }
-
 
 
 // --- 7. Update 系统：应用最终的 Transform ---
@@ -284,6 +292,7 @@ pub fn calculate_rotation(yaw: f32, pitch: f32) -> Quat {
 fn update_camera_transform(
     mut camera_query: Query<(&mut Transform, &GodViewCamera)>,
     state: Res<CameraRotateState>,
+    right_mouse_action: Res<RightMouseAction>, // 使用 RightMouseAction 来决定是否应用拖动状态
 ) {
     let (mut transform, camera) = match camera_query.single_mut() {
         Ok(t) => (t.0, t.1),
@@ -293,11 +302,12 @@ fn update_camera_transform(
     let rotation: Quat;
 
     // 如果正在拖动，使用拖动的 Yaw 和 Pitch
-    if state.dragging {
+    if *right_mouse_action == RightMouseAction::CameraDrag {
         rotation = calculate_rotation(state.yaw, state.pitch);
     }
     // 如果没有拖动，使用拖动后保留的 Yaw 和默认的 Pitch
     else {
+        // 当拖动结束后，Yaw 角应保持，Pitch 恢复默认，因此使用 state.yaw
         rotation = calculate_rotation(state.yaw, camera.default_pitch);
     }
 

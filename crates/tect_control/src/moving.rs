@@ -1,13 +1,13 @@
 ///外部使用改移动插件时在需要移动的组件生成时加上PlayerMove，地面组件加上Ground 并应用插件MoveControlPlugin
 use bevy::prelude::*;
-
+use tect_state::app_state::*;
 
 pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup)
-            .add_systems(Update, (mouse_button_system, character_movement_system));
+            .add_systems(Update, (mouse_button_system, character_movement_system).chain());
     }
 }
 
@@ -18,9 +18,12 @@ pub struct PlayerMove {
     pub target_position: Option<Vec3>,
 }
 
-// 资源：用于存储鼠标状态
+
+
+// 资源：用于存储鼠标状态（现在部分状态由 RightMouseAction 管理）
 #[derive(Resource)]
 struct MouseState {
+    // is_right_clicked 和 right_click_position 不再用于判定，仅用于记录点击信息
     is_right_clicked: bool,
     target_is_reach: bool,
     right_click_position: Vec2,
@@ -44,6 +47,7 @@ fn setup(mut commands: Commands) {
 // 鼠标按键处理系统
 fn mouse_button_system(
     mut mouse_state: ResMut<MouseState>,
+    mut right_mouse_action: ResMut<RightMouseAction>, // 共享状态
     mouse_button_input: Res<ButtonInput<MouseButton>>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
     ground: Single<&GlobalTransform, With<Ground>>,
@@ -51,42 +55,54 @@ fn mouse_button_system(
     mut gizmos: Gizmos,
     mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
 ) {
-    if mouse_button_input.just_pressed(MouseButton::Right) {
-        let (camera, camera_transform) = *camera_query;
+    // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
+    if *right_mouse_action != RightMouseAction::CharacterMove {
+        // 在这里，我们可以处理 CharacterMove 之后的重置，
+        // 或者简单地确保 CharacterMove 逻辑只运行一次。
+        return;
+    }
 
-        if let Some(cursor_position) = window.cursor_position()
-            && let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position)
-            && let Some(distance) =
-                ray.intersect_plane(ground.translation(), InfinitePlane3d::new(ground.up()))
-        {
-            let point = ray.get_point(distance);
+    // 重置状态：一旦进入 CharacterMove 逻辑，无论是否找到目标，都意味着点击动作已处理
+    // 下一帧开始时，CameraControl 系统会再次设置 AwaitingDecision (如果右键仍按着)，或 None
+    *right_mouse_action = RightMouseAction::None;
+    
+    // 以下是原有的移动逻辑，现在只在判定为 CharacterMove 时执行
+    let (camera, camera_transform) = *camera_query;
 
-            // gizmos绘制为实时绘制，当前在捕捉鼠标按下时只会渲染一帧，基本不可见，后续替换为在鼠标点击点播放一个动画
-            gizmos.circle(
-                Isometry3d::new(
-                    point + ground.up() * 0.01,
-                    Quat::from_rotation_arc(Vec3::Z, ground.up().as_vec3()),
-                ),
-                0.2,
-                Color::WHITE,
-            );
+    if let Some(cursor_position) = window.cursor_position()
+        && let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position)
+        && let Some(distance) =
+            ray.intersect_plane(ground.translation(), InfinitePlane3d::new(ground.up()))
+    {
+        let point = ray.get_point(distance);
 
-            mouse_state.is_right_clicked = true;
-            mouse_state.right_click_position = cursor_position;
+        // gizmos绘制为实时绘制，当前在捕捉鼠标按下时只会渲染一帧，基本不可见，后续替换为在鼠标点击点播放一个动画
+        gizmos.circle(
+            Isometry3d::new(
+                point + ground.up() * 0.01,
+                Quat::from_rotation_arc(Vec3::Z, ground.up().as_vec3()),
+            ),
+            0.2,
+            Color::WHITE,
+        );
 
-            //保存鼠标点击的目标地点
-            for (mut _transform, mut player) in player_query.iter_mut() {
-                let target_point = ray.origin + ray.direction * distance;
-                player.target_position = Some(target_point);
-                mouse_state.target_is_reach = false;
-            }
+        mouse_state.is_right_clicked = true;
+        mouse_state.right_click_position = cursor_position;
+
+        //保存鼠标点击的目标地点
+        for (mut _transform, mut player) in player_query.iter_mut() {
+            let target_point = ray.origin + ray.direction * distance;
+            player.target_position = Some(target_point);
+            mouse_state.target_is_reach = false;
         }
     }
-
-    if mouse_button_input.just_released(MouseButton::Right) {
-        mouse_state.is_right_clicked = false;
-    }
+    
+    // 释放逻辑：不再需要在这里处理 just_released，因为 CameraControl 已经通过 AwaitingDecision 状态处理了释放的判定。
+    // if mouse_button_input.just_released(MouseButton::Right) {
+    //     mouse_state.is_right_clicked = false;
+    // }
 }
+
 
 // 角色移动系统
 fn character_movement_system(
