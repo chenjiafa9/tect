@@ -70,6 +70,7 @@ impl Plugin for GodViewCameraPlugin {
                     // 必须在输入处理之后运行，以应用最终的 Transform
                     update_camera_transform,
                 )
+                    .run_if(in_state(AppState::InGame))
                     .chain(), // 链式执行确保顺序
             );
     }
@@ -335,4 +336,3 @@ pub fn calculate_rotation(yaw: f32, pitch: f32) -> Quat {
     // Bevy 的标准旋转顺序通常是 YXZ (Yaw, Pitch, Roll)
     Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch)
 }
-

@@ -7,6 +7,7 @@ edition = "2024"
 bevy = "0.17"
 tect_control = { path = "../tect_control", version = "0.1.0", default-features = false }
 tect_camera = { path = "../tect_camera", version = "0.1.0", default-features = false }
+tect_state = { path = "../tect_state", version = "0.1.0", default-features = false }
 
 [lints]
 workspace = true

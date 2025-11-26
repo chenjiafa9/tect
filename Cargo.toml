@@ -19,6 +19,15 @@ members = ["crates/*"]
 # unused_qualifications = "warn"
 
 
+#[profile.release]
+#lto = true
+#codegen-units = 1
+#panic = "abort"
+
+#[profile.dev]
+#lto = "thin"  # 如果 "thin" 不行，可以试试 "fat"
+#codegen-units = 1
+
 [workspace.lints.clippy]
 
 
@@ -52,7 +61,7 @@ crossbeam-channel = "0.5.0"
 argh = "0.1.12"
 thiserror = "2.0"
 anyhow = "1"
-bevy = { version = "0.17", features = ["dynamic_linking"] }
+bevy = { version = "0.17" }
 
 
 [dev-dependencies]

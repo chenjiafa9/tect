@@ -3,13 +3,14 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 use tect_camera::god_view_camera::{GodViewCamera, GodViewCameraPlugin,calculate_rotation};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
+use tect_state::app_state::*;
 
 pub struct WorldScenePlugin;
 
 impl Plugin for WorldScenePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((MoveControlPlugin, GodViewCameraPlugin))
-            .add_systems(Startup, setup);
+            .add_systems(OnEnter(AppState::InGame), setup);
     }
 }
 

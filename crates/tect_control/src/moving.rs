@@ -7,7 +7,7 @@ pub struct MoveControlPlugin;
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup)
-            .add_systems(Update, (mouse_button_system, character_movement_system).chain());
+            .add_systems(Update, (mouse_button_system, character_movement_system).run_if(in_state(AppState::InGame)).chain());
     }
 }
 
