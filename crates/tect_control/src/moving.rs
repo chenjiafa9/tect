@@ -1,3 +1,7 @@
+use std::time::Duration;
+
+use bevy::animation::{AnimationEvent, RepeatAnimation};
+use bevy::gltf::Gltf;
 ///外部使用改移动插件时在需要移动的组件生成时加上PlayerMove，地面组件加上Ground 并应用插件MoveControlPlugin
 use bevy::prelude::*;
 use tect_state::app_state::*;
@@ -6,8 +10,18 @@ pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
-            .add_systems(Update, (mouse_button_system, character_movement_system).run_if(in_state(AppState::InGame)).chain());
+        app.add_systems(Startup, (setup, load_click_effect_assets))
+            .add_systems(
+                Update,
+                (
+                    mouse_button_system,
+                    character_movement_system,
+                    setup_click_effect_once_loaded,
+                    despawn_finished_click_effects,
+                )
+                    .run_if(in_state(AppState::InGame))
+                    .chain(),
+            );
     }
 }
 
@@ -18,7 +32,15 @@ pub struct PlayerMove {
     pub target_position: Option<Vec3>,
 }
 
-
+// ──────────────────────────────────────────────────────────────
+// 1. 资源定义：预加载的特效场景 + 动画图
+// ──────────────────────────────────────────────────────────────
+#[derive(Resource)]
+pub struct ClickEffectAssets {
+    pub scene: Handle<Scene>,
+    pub graph: Handle<AnimationGraph>,
+    pub click_animation: AnimationNodeIndex, // 我们只用一个“Click”动画
+}
 
 // 资源：用于存储鼠标状态（现在部分状态由 RightMouseAction 管理）
 #[derive(Resource)]
@@ -34,7 +56,7 @@ struct MouseState {
 #[derive(Component)]
 pub struct Ground;
 
-// 初始化测试系统，插件实际应用时不挂载该系统
+// 初始化资源
 fn setup(mut commands: Commands) {
     // 初始化鼠标状态
     commands.insert_resource(MouseState {
@@ -48,12 +70,13 @@ fn setup(mut commands: Commands) {
 fn mouse_button_system(
     mut mouse_state: ResMut<MouseState>,
     mut right_mouse_action: ResMut<RightMouseAction>, // 共享状态
-    mouse_button_input: Res<ButtonInput<MouseButton>>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
     ground: Single<&GlobalTransform, With<Ground>>,
     window: Single<&Window>,
-    mut gizmos: Gizmos,
     mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
+    click_effect_assets: Res<ClickEffectAssets>,
+    gltf_assets: Res<Assets<Gltf>>,
+    mut commands: Commands,
 ) {
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
     if *right_mouse_action != RightMouseAction::CharacterMove {
@@ -65,7 +88,7 @@ fn mouse_button_system(
     // 重置状态：一旦进入 CharacterMove 逻辑，无论是否找到目标，都意味着点击动作已处理
     // 下一帧开始时，CameraControl 系统会再次设置 AwaitingDecision (如果右键仍按着)，或 None
     *right_mouse_action = RightMouseAction::None;
-    
+
     // 以下是原有的移动逻辑，现在只在判定为 CharacterMove 时执行
     let (camera, camera_transform) = *camera_query;
 
@@ -75,17 +98,6 @@ fn mouse_button_system(
             ray.intersect_plane(ground.translation(), InfinitePlane3d::new(ground.up()))
     {
         let point = ray.get_point(distance);
-
-        // gizmos绘制为实时绘制，当前在捕捉鼠标按下时只会渲染一帧，基本不可见，后续替换为在鼠标点击点播放一个动画
-        gizmos.circle(
-            Isometry3d::new(
-                point + ground.up() * 0.01,
-                Quat::from_rotation_arc(Vec3::Z, ground.up().as_vec3()),
-            ),
-            0.2,
-            Color::WHITE,
-        );
-
         mouse_state.is_right_clicked = true;
         mouse_state.right_click_position = cursor_position;
 
@@ -95,14 +107,21 @@ fn mouse_button_system(
             player.target_position = Some(target_point);
             mouse_state.target_is_reach = false;
         }
+
+        // —— 新增：生成外部动画特效 ——
+        spawn_click_effect(
+            &mut commands,
+            &click_effect_assets,
+            point,
+            ground.up().as_vec3(),
+        );
     }
-    
+
     // 释放逻辑：不再需要在这里处理 just_released，因为 CameraControl 已经通过 AwaitingDecision 状态处理了释放的判定。
     // if mouse_button_input.just_released(MouseButton::Right) {
     //     mouse_state.is_right_clicked = false;
     // }
 }
-
 
 // 角色移动系统
 fn character_movement_system(
@@ -135,4 +154,122 @@ fn character_movement_system(
             }
         }
     }
+}
+
+///初始化右键动画资源
+pub fn load_click_effect_assets(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    let scene_handle: Handle<Scene> = asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run.glb"));
+
+    // 假设你的 glTF 中有一个名为 "Click" 的动画（索引 0）
+    let (graph, animation_indices) = AnimationGraph::from_clips([
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run.glb"))
+    ]);
+
+    let graph_handle = graphs.add(graph);
+
+    commands.insert_resource(ClickEffectAssets {
+        scene: scene_handle,
+        graph: graph_handle,
+        click_animation: animation_indices[0],
+    });
+}
+
+// ──────────────────────────────────────────────────────────────
+// 生成特效函数（在鼠标系统里调用）
+// ──────────────────────────────────────────────────────────────
+fn spawn_click_effect(
+    commands: &mut Commands,
+    effect_assets: &ClickEffectAssets,
+    position: Vec3,
+    ground_normal: Vec3,
+) {
+    commands.spawn((
+        SceneRoot(effect_assets.scene.clone()),
+        Transform::from_translation(position + ground_normal * 0.02)
+            .looking_to(ground_normal, Vec3::Y),
+        GlobalTransform::default(),
+        Visibility::Visible,
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+        ClickEffectMarker,
+        // 这些组件会在 setup_effect_once_loaded 中被填充
+        // 所以这里先占位，实际会在加载完成后插入
+    ));
+}
+
+// 标记组件
+#[derive(Component)]
+struct ClickEffectMarker;
+
+// ──────────────────────────────────────────────────────────────
+// 关键系统：场景加载完成后绑定动画图 + 播放一次 + 自动销毁
+// ──────────────────────────────────────────────────────────────
+fn setup_click_effect_once_loaded(
+    mut commands: Commands,
+    effect_assets: Res<ClickEffectAssets>,
+    // 只查询本次新生成的特效实体中，刚刚添加了 AnimationPlayer 的
+    mut query: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+) {
+    for (entity, mut player) in query.iter_mut() {
+        // 安全检查：确保是我们生成的特效
+        if !commands.get_entity(entity).is_err() {
+            continue;
+        }
+
+        let mut entity_cmds = commands.entity(entity);
+
+        // 插入动画图
+        entity_cmds.insert(AnimationGraphHandle(effect_assets.graph.clone()));
+
+        // 创建过渡控制器
+        let mut transitions = AnimationTransitions::new();
+
+        // 立即播放“Click”动画，0.2秒淡入，播放一次
+        transitions
+            .play(
+                player.as_mut(),
+                effect_assets.click_animation,
+                Duration::from_millis(200),
+            )
+            .set_repeat(RepeatAnimation::Count(1));
+
+        entity_cmds.insert(transitions);
+
+        // 可选：播放完后自动销毁（更稳妥的方式）
+        entity_cmds.insert(AutoDespawnOnAnimationFinish);
+    }
+}
+
+// 标记：动画播放完后自动删除
+#[derive(Component)]
+struct AutoDespawnOnAnimationFinish;
+
+// ──────────────────────────────────────────────────────────────
+// 清理系统：监听动画结束事件并删除实体（官方推荐方式）
+// ──────────────────────────────────────────────────────────────
+fn despawn_finished_click_effects(
+    mut commands: Commands,
+    // mut events: MessageReader<AnimationEvent>,
+    query: Query<Entity, With<AutoDespawnOnAnimationFinish>>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
+    // for event in events.read() {
+    //     if event.event_type == AnimationEventType::Finished {
+    //         if let Ok((entity, _)) = query.get(event.entity) {
+    //             commands.entity(entity).despawn_recursive();
+    //         }
+    //         // 支持 AnimationPlayer 在子节点的情况
+    //         else if let Some(parent) = commands.entity(event.entity).get_parent() {
+    //             if query.contains(parent) {
+    //                 commands.entity(parent).despawn_recursive();
+    //             }
+    //         }
+    //     }
+    // }
 }
