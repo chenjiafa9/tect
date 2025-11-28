@@ -116,7 +116,7 @@ fn camera_zoom(
         camera.distance -= scroll_y * zoom_factor;
 
         // 限制缩放范围
-        camera.distance = camera.distance.clamp(5.0, 30.0);
+        camera.distance = camera.distance.clamp(5.0, 50.0);
     }
 }
 

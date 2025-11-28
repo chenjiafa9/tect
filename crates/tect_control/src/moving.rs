@@ -1,3 +1,5 @@
+///描述：当前动画的加载与保存以及动画播放存在问题，与bevy0.17官方示例存在区别，且无法清除播放完的动画，动画事件未成功添加
+
 use std::time::Duration;
 
 use bevy::animation::{AnimationEvent, RepeatAnimation};
@@ -247,6 +249,7 @@ fn setup_click_effect_once_loaded(
 // 标记：动画播放完后自动删除
 #[derive(Component)]
 struct AutoDespawnOnAnimationFinish;
+
 
 // ──────────────────────────────────────────────────────────────
 // 清理系统：监听动画结束事件并删除实体（官方推荐方式）

@@ -88,20 +88,20 @@ fn setup_menu(
         ))
         .with_children(|parent| {
             // 标题
-            parent.spawn((
-                Text::new("MY AWESOME GAME"),
-                TextFont {
-                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                    font_size: 80.0,
-                    ..default()
-                },
-                TextColor(TEXT_COLOR),
-                Node {
-                    margin: UiRect::bottom(Val::Px(60.0)),
-                    ..default()
-                },
-                // 进场动画用
-            ));
+            // parent.spawn((
+            //     Text::new("MY AWESOME GAME"),
+            //     TextFont {
+            //         font: asset_server.load("fonts/AlibabaPuHuiTi-3-55-Regular.ttf"), 
+            //         font_size: 80.0,
+            //         ..default()
+            //     },
+            //     TextColor(TEXT_COLOR),
+            //     Node {
+            //         margin: UiRect::bottom(Val::Px(60.0)),
+            //         ..default()
+            //     },
+            //     // 进场动画用
+            // ));
 
             // 半透明毛玻璃主面板
             parent

@@ -1,7 +1,7 @@
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 use std::f32::consts::PI;
-use tect_camera::god_view_camera::{GodViewCamera, GodViewCameraPlugin,calculate_rotation};
+use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
 use tect_state::app_state::*;
 
@@ -21,24 +21,24 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    // 光源
-    commands.spawn((
-        PointLight {
-            intensity: 100_000.0,
-            color: RED.into(),
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(1.0, 2.0, 0.0),
-        children![(
-            Mesh3d(meshes.add(Sphere::new(0.1).mesh().uv(32, 18))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: RED.into(),
-                emissive: LinearRgba::new(4.0, 0.0, 0.0, 0.0),
-                ..default()
-            })),
-        )],
-    ));
+    //点光源
+    // commands.spawn((
+    //     PointLight {
+    //         intensity: 1000_000.0,
+    //         color: WHITE.into(),
+    //         shadows_enabled: true,
+    //         ..default()
+    //     },
+    //     Transform::from_xyz(10.0, 200.0, 0.0),
+    //     children![(
+    //         Mesh3d(meshes.add(Sphere::new(0.1).mesh().uv(32, 18))),
+    //         MeshMaterial3d(materials.add(StandardMaterial {
+    //             base_color: WHITE.into(),
+    //             emissive: LinearRgba::new(4.0, 0.0, 0.0, 0.0),
+    //             ..default()
+    //         })),
+    //     )],
+    // ));
 
     let camera_data = GodViewCamera::default();
 
@@ -55,15 +55,19 @@ fn setup(
             rotation,
             ..default()
         },
+        //环境光
+        AmbientLight {
+            color: WHITE.into(),
+            brightness: 1000.0,
+            ..default()
+        },
         camera_data,
     ));
 
     // 角色
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/robot_01.glb"))),
-        Transform::from_scale(Vec3::splat(2.0))
-            .with_translation(Vec3::new(-2.0, 0.05, -2.1))
-            .with_rotation(Quat::from_rotation_y(PI / 2.0)),
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_walk.glb"))),
+        Transform::from_scale(Vec3::new(1.0,1.0,1.0)),
         PlayerMove {
             move_speed: 2.0,
             target_position: None,
@@ -72,11 +76,8 @@ fn setup(
 
     // 场景
     commands.spawn((
-        SceneRoot(
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/mini_diorama_01.glb")),
-        ),
-        Transform::from_scale(Vec3::splat(10.0)),
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/simple_map.glb"))),
+        Transform::from_scale(Vec3::splat(1.0)),
         Ground,
     ));
 }
-
