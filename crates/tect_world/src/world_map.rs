@@ -67,7 +67,10 @@ fn setup(
     // 角色
     commands.spawn((
         SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_walk.glb"))),
-        Transform::from_scale(Vec3::new(1.0,1.0,1.0)),
+        Transform {
+            translation: Vec3::new(5.0, 1.0, 2.0),
+            ..default()
+        },
         PlayerMove {
             move_speed: 2.0,
             target_position: None,

@@ -1,24 +1,27 @@
-///描述：当前动画的加载与保存以及动画播放存在问题，与bevy0.17官方示例存在区别，且无法清除播放完的动画，动画事件未成功添加
-
-use std::time::Duration;
-
-use bevy::animation::{AnimationEvent, RepeatAnimation};
+use bevy::animation::{AnimationEvent, AnimationTargetId, RepeatAnimation};
+use bevy::asset::AssetContainer;
+use bevy::color::palettes::css::WHITE;
 use bevy::gltf::Gltf;
 ///外部使用改移动插件时在需要移动的组件生成时加上PlayerMove，地面组件加上Ground 并应用插件MoveControlPlugin
 use bevy::prelude::*;
+///描述：当前动画的加载与保存以及动画播放存在问题，与bevy0.17官方示例存在区别，且无法清除播放完的动画，动画事件未成功添加
+use std::time::Duration;
 use tect_state::app_state::*;
 
 pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (setup, load_click_effect_assets))
+        app.init_resource::<ParticleAssets>()
+            .add_observer(observe_on_click)
+            .add_systems(Startup, (setup, load_click_effect_assets))
             .add_systems(
                 Update,
                 (
                     mouse_button_system,
                     character_movement_system,
                     setup_click_effect_once_loaded,
+                    // setup_scene_once_loaded,
                     despawn_finished_click_effects,
                 )
                     .run_if(in_state(AppState::InGame))
@@ -42,6 +45,7 @@ pub struct ClickEffectAssets {
     pub scene: Handle<Scene>,
     pub graph: Handle<AnimationGraph>,
     pub click_animation: AnimationNodeIndex, // 我们只用一个“Click”动画
+    pub targt_id: AnimationTargetId,
 }
 
 // 资源：用于存储鼠标状态（现在部分状态由 RightMouseAction 管理）
@@ -77,7 +81,6 @@ fn mouse_button_system(
     window: Single<&Window>,
     mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
     click_effect_assets: Res<ClickEffectAssets>,
-    gltf_assets: Res<Assets<Gltf>>,
     mut commands: Commands,
 ) {
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
@@ -164,19 +167,21 @@ pub fn load_click_effect_assets(
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    let scene_handle: Handle<Scene> = asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run.glb"));
+    let scene_handle: Handle<Scene> =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run.glb"));
 
     // 假设你的 glTF 中有一个名为 "Click" 的动画（索引 0）
     let (graph, animation_indices) = AnimationGraph::from_clips([
         asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run.glb"))
     ]);
-
     let graph_handle = graphs.add(graph);
+    let name = Name::new("on_click");
 
     commands.insert_resource(ClickEffectAssets {
         scene: scene_handle,
         graph: graph_handle,
         click_animation: animation_indices[0],
+        targt_id: AnimationTargetId::from_name(&name),
     });
 }
 
@@ -213,14 +218,24 @@ struct ClickEffectMarker;
 fn setup_click_effect_once_loaded(
     mut commands: Commands,
     effect_assets: Res<ClickEffectAssets>,
+    animations: Res<ClickEffectAssets>,
+    graphs: Res<Assets<AnimationGraph>>,
+    mut clips: ResMut<Assets<AnimationClip>>,
     // 只查询本次新生成的特效实体中，刚刚添加了 AnimationPlayer 的
     mut query: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
 ) {
     for (entity, mut player) in query.iter_mut() {
         // 安全检查：确保是我们生成的特效
-        if !commands.get_entity(entity).is_err() {
+        if commands.get_entity(entity).is_err() {
             continue;
         }
+        let graph = graphs.get(&animations.graph).unwrap();
+        let running_animation = get_clip(animations.click_animation, graph, &mut clips);
+
+        // You can determine the time an event should trigger if you know witch frame it occurs and
+        // the frame rate of the animation. Let's say we want to trigger an event at frame 15,
+        // and the animation has a frame rate of 24 fps, then time = 15 / 24 = 0.625.
+        running_animation.add_event_to_target(animations.targt_id, 0.625, OnClick);
 
         let mut entity_cmds = commands.entity(entity);
 
@@ -235,44 +250,74 @@ fn setup_click_effect_once_loaded(
             .play(
                 player.as_mut(),
                 effect_assets.click_animation,
-                Duration::from_millis(200),
+                Duration::from_millis(0),
             )
             .set_repeat(RepeatAnimation::Count(1));
 
         entity_cmds.insert(transitions);
-
         // 可选：播放完后自动销毁（更稳妥的方式）
         entity_cmds.insert(AutoDespawnOnAnimationFinish);
     }
+}
+
+fn get_clip<'a>(
+    node: AnimationNodeIndex,
+    graph: &AnimationGraph,
+    clips: &'a mut Assets<AnimationClip>,
+) -> &'a mut AnimationClip {
+    let node = graph.get(node).unwrap();
+    let clip = match &node.node_type {
+        AnimationNodeType::Clip(handle) => clips.get_mut(handle),
+        _ => unreachable!(),
+    };
+    clip.unwrap()
 }
 
 // 标记：动画播放完后自动删除
 #[derive(Component)]
 struct AutoDespawnOnAnimationFinish;
 
-
 // ──────────────────────────────────────────────────────────────
 // 清理系统：监听动画结束事件并删除实体（官方推荐方式）
 // ──────────────────────────────────────────────────────────────
 fn despawn_finished_click_effects(
     mut commands: Commands,
-    // mut events: MessageReader<AnimationEvent>,
-    query: Query<Entity, With<AutoDespawnOnAnimationFinish>>,
+    // mut click: On<OnClick>,
+    click: Query<Entity, With<AutoDespawnOnAnimationFinish>>,
 ) {
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
+    // commands.entity().despawn();
+}
+
+#[derive(Resource)]
+struct ParticleAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+}
+
+impl FromWorld for ParticleAssets {
+    fn from_world(world: &mut World) -> Self {
+        Self {
+            mesh: world.add_asset::<Mesh>(Sphere::new(10.0)),
+            material: world.add_asset::<StandardMaterial>(StandardMaterial {
+                base_color: WHITE.into(),
+                ..Default::default()
+            }),
+        }
     }
-    // for event in events.read() {
-    //     if event.event_type == AnimationEventType::Finished {
-    //         if let Ok((entity, _)) = query.get(event.entity) {
-    //             commands.entity(entity).despawn_recursive();
-    //         }
-    //         // 支持 AnimationPlayer 在子节点的情况
-    //         else if let Some(parent) = commands.entity(event.entity).get_parent() {
-    //             if query.contains(parent) {
-    //                 commands.entity(parent).despawn_recursive();
-    //             }
-    //         }
-    //     }
-    // }
+}
+
+///鼠标右键动画事件
+#[derive(AnimationEvent, Reflect, Clone)]
+struct OnClick;
+
+fn observe_on_click(
+    step: On<OnClick>,
+    mut commands: Commands,
+    transforms: Query<&GlobalTransform>,
+) -> Result {
+    // let translation = transforms
+    //     .get(step.trigger().animation_player)?
+    //     .translation();
+    commands.entity(step.trigger().animation_player).despawn();
+    Ok(())
 }
