@@ -12,9 +12,7 @@ pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ParticleAssets>()
-            .add_observer(observe_on_click)
-            .add_systems(Startup, (setup, load_click_effect_assets))
+        app.add_systems(Startup, (setup, load_click_effect_assets))
             .add_systems(
                 Update,
                 (
@@ -38,14 +36,13 @@ pub struct PlayerMove {
 }
 
 // ──────────────────────────────────────────────────────────────
-// 1. 资源定义：预加载的特效场景 + 动画图
+// 1. 资源定义：右键动画
 // ──────────────────────────────────────────────────────────────
 #[derive(Resource)]
 pub struct ClickEffectAssets {
     pub scene: Handle<Scene>,
     pub graph: Handle<AnimationGraph>,
     pub click_animation: AnimationNodeIndex, // 我们只用一个“Click”动画
-    pub targt_id: AnimationTargetId,
 }
 
 // 资源：用于存储鼠标状态（现在部分状态由 RightMouseAction 管理）
@@ -82,6 +79,7 @@ fn mouse_button_system(
     mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
     click_effect_assets: Res<ClickEffectAssets>,
     mut commands: Commands,
+    mut animation_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
     if *right_mouse_action != RightMouseAction::CharacterMove {
@@ -112,20 +110,16 @@ fn mouse_button_system(
             player.target_position = Some(target_point);
             mouse_state.target_is_reach = false;
         }
+        start_stop_onclick(click_effect_assets, animation_players);
 
         // —— 新增：生成外部动画特效 ——
-        spawn_click_effect(
-            &mut commands,
-            &click_effect_assets,
-            point,
-            ground.up().as_vec3(),
-        );
+        // spawn_click_effect(
+        //     &mut commands,
+        //     &click_effect_assets,
+        //     point,
+        //     ground.up().as_vec3(),
+        // );
     }
-
-    // 释放逻辑：不再需要在这里处理 just_released，因为 CameraControl 已经通过 AwaitingDecision 状态处理了释放的判定。
-    // if mouse_button_input.just_released(MouseButton::Right) {
-    //     mouse_state.is_right_clicked = false;
-    // }
 }
 
 // 角色移动系统
@@ -168,21 +162,32 @@ pub fn load_click_effect_assets(
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     let scene_handle: Handle<Scene> =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run.glb"));
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
 
-    // 假设你的 glTF 中有一个名为 "Click" 的动画（索引 0）
     let (graph, animation_indices) = AnimationGraph::from_clips([
-        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run.glb"))
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb"))
     ]);
     let graph_handle = graphs.add(graph);
-    let name = Name::new("on_click");
-
     commands.insert_resource(ClickEffectAssets {
         scene: scene_handle,
         graph: graph_handle,
         click_animation: animation_indices[0],
-        targt_id: AnimationTargetId::from_name(&name),
     });
+}
+
+///角色跑步动画启动
+pub fn start_stop_onclick(
+    effect_assets: Res<ClickEffectAssets>,
+    mut animation_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+) {
+    for (mut player, mut _transitions) in &mut animation_players {
+        let playing_animation = player.animation_mut(effect_assets.click_animation).unwrap();
+        if playing_animation.is_paused() {
+            playing_animation.resume();
+        } else {
+            playing_animation.pause();
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -202,15 +207,11 @@ fn spawn_click_effect(
         Visibility::Visible,
         InheritedVisibility::default(),
         ViewVisibility::default(),
-        ClickEffectMarker,
         // 这些组件会在 setup_effect_once_loaded 中被填充
         // 所以这里先占位，实际会在加载完成后插入
     ));
 }
 
-// 标记组件
-#[derive(Component)]
-struct ClickEffectMarker;
 
 // ──────────────────────────────────────────────────────────────
 // 关键系统：场景加载完成后绑定动画图 + 播放一次 + 自动销毁
@@ -232,11 +233,6 @@ fn setup_click_effect_once_loaded(
         let graph = graphs.get(&animations.graph).unwrap();
         let running_animation = get_clip(animations.click_animation, graph, &mut clips);
 
-        // You can determine the time an event should trigger if you know witch frame it occurs and
-        // the frame rate of the animation. Let's say we want to trigger an event at frame 15,
-        // and the animation has a frame rate of 24 fps, then time = 15 / 24 = 0.625.
-        running_animation.add_event_to_target(animations.targt_id, 0.625, OnClick);
-
         let mut entity_cmds = commands.entity(entity);
 
         // 插入动画图
@@ -255,8 +251,7 @@ fn setup_click_effect_once_loaded(
             .set_repeat(RepeatAnimation::Count(1));
 
         entity_cmds.insert(transitions);
-        // 可选：播放完后自动销毁（更稳妥的方式）
-        entity_cmds.insert(AutoDespawnOnAnimationFinish);
+        
     }
 }
 
@@ -272,52 +267,12 @@ fn get_clip<'a>(
     };
     clip.unwrap()
 }
-
-// 标记：动画播放完后自动删除
-#[derive(Component)]
-struct AutoDespawnOnAnimationFinish;
-
 // ──────────────────────────────────────────────────────────────
 // 清理系统：监听动画结束事件并删除实体（官方推荐方式）
 // ──────────────────────────────────────────────────────────────
 fn despawn_finished_click_effects(
     mut commands: Commands,
     // mut click: On<OnClick>,
-    click: Query<Entity, With<AutoDespawnOnAnimationFinish>>,
 ) {
     // commands.entity().despawn();
-}
-
-#[derive(Resource)]
-struct ParticleAssets {
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-}
-
-impl FromWorld for ParticleAssets {
-    fn from_world(world: &mut World) -> Self {
-        Self {
-            mesh: world.add_asset::<Mesh>(Sphere::new(10.0)),
-            material: world.add_asset::<StandardMaterial>(StandardMaterial {
-                base_color: WHITE.into(),
-                ..Default::default()
-            }),
-        }
-    }
-}
-
-///鼠标右键动画事件
-#[derive(AnimationEvent, Reflect, Clone)]
-struct OnClick;
-
-fn observe_on_click(
-    step: On<OnClick>,
-    mut commands: Commands,
-    transforms: Query<&GlobalTransform>,
-) -> Result {
-    // let translation = transforms
-    //     .get(step.trigger().animation_player)?
-    //     .translation();
-    commands.entity(step.trigger().animation_player).despawn();
-    Ok(())
 }

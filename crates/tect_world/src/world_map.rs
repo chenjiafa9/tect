@@ -66,7 +66,7 @@ fn setup(
 
     // 角色
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_walk.glb"))),
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"))),
         Transform {
             translation: Vec3::new(5.0, 1.0, 2.0),
             ..default()
