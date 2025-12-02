@@ -63,7 +63,6 @@ fn setup(
         },
         camera_data,
     ));
-
     // 角色
     commands.spawn((
         SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"))),
@@ -76,7 +75,6 @@ fn setup(
             target_position: None,
         },
     ));
-
     // 场景
     commands.spawn((
         SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/simple_map.glb"))),

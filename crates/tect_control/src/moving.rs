@@ -1,7 +1,3 @@
-use bevy::animation::{AnimationEvent, AnimationTargetId, RepeatAnimation};
-use bevy::asset::AssetContainer;
-use bevy::color::palettes::css::WHITE;
-use bevy::gltf::Gltf;
 ///外部使用改移动插件时在需要移动的组件生成时加上PlayerMove，地面组件加上Ground 并应用插件MoveControlPlugin
 use bevy::prelude::*;
 ///描述：当前动画的加载与保存以及动画播放存在问题，与bevy0.17官方示例存在区别，且无法清除播放完的动画，动画事件未成功添加
@@ -12,15 +8,13 @@ pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (setup, load_click_effect_assets))
+        app.add_systems(Startup, load_click_effect_assets)
             .add_systems(
                 Update,
                 (
                     mouse_button_system,
                     character_movement_system,
-                    setup_click_effect_once_loaded,
-                    // setup_scene_once_loaded,
-                    despawn_finished_click_effects,
+                    control_run_animation_system,
                 )
                     .run_if(in_state(AppState::InGame))
                     .chain(),
@@ -59,14 +53,35 @@ struct MouseState {
 #[derive(Component)]
 pub struct Ground;
 
+// 新增：标记角色当前是否应该播放跑步动画
+#[derive(Component, Default)]
+pub struct IsMoving;
+
 // 初始化资源
-fn setup(mut commands: Commands) {
+fn load_click_effect_assets(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    let scene_handle: Handle<Scene> =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
+
+    let (graph, animation_indices) = AnimationGraph::from_clips([
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb"))
+    ]);
+    let graph_handle = graphs.add(graph);
+    commands.insert_resource(ClickEffectAssets {
+        scene: scene_handle.clone(),
+        graph: graph_handle.clone(),
+        click_animation: animation_indices[0],
+    });
     // 初始化鼠标状态
     commands.insert_resource(MouseState {
         is_right_clicked: false,
         target_is_reach: false,
         right_click_position: Vec2::ZERO,
     });
+    commands.spawn(AnimationGraphHandle(graph_handle));
 }
 
 // 鼠标按键处理系统
@@ -76,10 +91,8 @@ fn mouse_button_system(
     camera_query: Single<(&Camera, &GlobalTransform)>,
     ground: Single<&GlobalTransform, With<Ground>>,
     window: Single<&Window>,
-    mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
-    click_effect_assets: Res<ClickEffectAssets>,
+    mut player_query: Query<(Entity, &mut Transform, &mut PlayerMove), With<PlayerMove>>,
     mut commands: Commands,
-    mut animation_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
     if *right_mouse_action != RightMouseAction::CharacterMove {
@@ -105,26 +118,19 @@ fn mouse_button_system(
         mouse_state.right_click_position = cursor_position;
 
         //保存鼠标点击的目标地点
-        for (mut _transform, mut player) in player_query.iter_mut() {
+        for (entity, mut _transform, mut player) in player_query.iter_mut() {
             let target_point = ray.origin + ray.direction * distance;
             player.target_position = Some(target_point);
             mouse_state.target_is_reach = false;
+            commands.entity(entity).insert(IsMoving);
         }
-        start_stop_onclick(click_effect_assets, animation_players);
-
-        // —— 新增：生成外部动画特效 ——
-        // spawn_click_effect(
-        //     &mut commands,
-        //     &click_effect_assets,
-        //     point,
-        //     ground.up().as_vec3(),
-        // );
     }
 }
 
 // 角色移动系统
 fn character_movement_system(
-    mut player_query: Query<(&mut Transform, &mut PlayerMove)>,
+    mut commands: Commands,
+    mut player_query: Query<(Entity, &mut Transform, &mut PlayerMove, &Children)>,
     mut mouse_state: ResMut<MouseState>,
     time: Res<Time>,
 ) {
@@ -132,147 +138,58 @@ fn character_movement_system(
         return;
     };
     //角色移动逻辑
-    for (mut transform, mut player) in player_query.iter_mut() {
+    for (entity, mut transform, mut player, _children) in player_query.iter_mut() {
         // 如果已经设置了目标位置，则平滑移动过去
         if let Some(target) = player.target_position {
             let direction = target - transform.translation;
             let distance = direction.length();
+            let translation = transform.translation;
 
-            if distance > 0.1 {
-                let movement = direction.normalize() * player.move_speed * time.delta_secs();
-                // 让角色面向移动方向
-                let look_direction = Vec3::new(movement.x, 0.0, movement.z).normalize();
-                let translation = transform.translation;
-                transform.look_at(translation + look_direction, Vec3::Y);
-                // 只在XZ平面移动，保持Y坐标不变
-                transform.translation.x += movement.x;
-                transform.translation.z += movement.z;
+            if distance > 0.2 {
+                let move_vec = direction.normalize() * player.move_speed * time.delta_secs();
+                let look_dir = Vec3::new(move_vec.x, 0.0, move_vec.z).normalize_or_zero();
+
+                // 面向移动方向
+                if look_dir.length_squared() > 0.0 {
+                    transform.look_at(translation - look_dir, Vec3::Y);
+                }
+
+                // 只移动 XZ
+                transform.translation += move_vec.with_y(0.0);
+
+                mouse_state.target_is_reach = false;
             } else {
-                mouse_state.target_is_reach = true;
+                // 到达目标
                 player.target_position = None;
+                mouse_state.target_is_reach = true;
+
+                // 移除 IsMoving → 动画系统会暂停动画
+                commands.entity(entity).remove::<IsMoving>();
             }
         }
     }
 }
 
-///初始化右键动画资源
-pub fn load_click_effect_assets(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-) {
-    let scene_handle: Handle<Scene> =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
-
-    let (graph, animation_indices) = AnimationGraph::from_clips([
-        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb"))
-    ]);
-    let graph_handle = graphs.add(graph);
-    commands.insert_resource(ClickEffectAssets {
-        scene: scene_handle,
-        graph: graph_handle,
-        click_animation: animation_indices[0],
-    });
-}
-
-///角色跑步动画启动
-pub fn start_stop_onclick(
+// ========================
+// 关键：根据 IsMoving 组件控制动画播放/暂停
+// ========================
+fn control_run_animation_system(
     effect_assets: Res<ClickEffectAssets>,
-    mut animation_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+    moving_query: Query<(), With<IsMoving>>, // 玩家根有 IsMoving
+    mut player_query: Query<&mut AnimationPlayer>,
 ) {
-    for (mut player, mut _transitions) in &mut animation_players {
-        let playing_animation = player.animation_mut(effect_assets.click_animation).unwrap();
-        if playing_animation.is_paused() {
-            playing_animation.resume();
+    let should_play = !moving_query.is_empty();
+    for mut player in player_query.iter_mut() {
+        if should_play {
+            // 正在移动 → 播放跑步动画（只 play 一次，避免重复触发）
+            if player.animation(effect_assets.click_animation).is_none() {
+                player.play(effect_assets.click_animation).repeat();
+            }
         } else {
-            playing_animation.pause();
+            // 停止移动 → 暂停或清空动画（推荐暂停，更自然）
+            if player.animation(effect_assets.click_animation).is_some() {
+                player.stop(effect_assets.click_animation);
+            }
         }
     }
-}
-
-// ──────────────────────────────────────────────────────────────
-// 生成特效函数（在鼠标系统里调用）
-// ──────────────────────────────────────────────────────────────
-fn spawn_click_effect(
-    commands: &mut Commands,
-    effect_assets: &ClickEffectAssets,
-    position: Vec3,
-    ground_normal: Vec3,
-) {
-    commands.spawn((
-        SceneRoot(effect_assets.scene.clone()),
-        Transform::from_translation(position + ground_normal * 0.02)
-            .looking_to(ground_normal, Vec3::Y),
-        GlobalTransform::default(),
-        Visibility::Visible,
-        InheritedVisibility::default(),
-        ViewVisibility::default(),
-        // 这些组件会在 setup_effect_once_loaded 中被填充
-        // 所以这里先占位，实际会在加载完成后插入
-    ));
-}
-
-
-// ──────────────────────────────────────────────────────────────
-// 关键系统：场景加载完成后绑定动画图 + 播放一次 + 自动销毁
-// ──────────────────────────────────────────────────────────────
-fn setup_click_effect_once_loaded(
-    mut commands: Commands,
-    effect_assets: Res<ClickEffectAssets>,
-    animations: Res<ClickEffectAssets>,
-    graphs: Res<Assets<AnimationGraph>>,
-    mut clips: ResMut<Assets<AnimationClip>>,
-    // 只查询本次新生成的特效实体中，刚刚添加了 AnimationPlayer 的
-    mut query: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
-) {
-    for (entity, mut player) in query.iter_mut() {
-        // 安全检查：确保是我们生成的特效
-        if commands.get_entity(entity).is_err() {
-            continue;
-        }
-        let graph = graphs.get(&animations.graph).unwrap();
-        let running_animation = get_clip(animations.click_animation, graph, &mut clips);
-
-        let mut entity_cmds = commands.entity(entity);
-
-        // 插入动画图
-        entity_cmds.insert(AnimationGraphHandle(effect_assets.graph.clone()));
-
-        // 创建过渡控制器
-        let mut transitions = AnimationTransitions::new();
-
-        // 立即播放“Click”动画，0.2秒淡入，播放一次
-        transitions
-            .play(
-                player.as_mut(),
-                effect_assets.click_animation,
-                Duration::from_millis(0),
-            )
-            .set_repeat(RepeatAnimation::Count(1));
-
-        entity_cmds.insert(transitions);
-        
-    }
-}
-
-fn get_clip<'a>(
-    node: AnimationNodeIndex,
-    graph: &AnimationGraph,
-    clips: &'a mut Assets<AnimationClip>,
-) -> &'a mut AnimationClip {
-    let node = graph.get(node).unwrap();
-    let clip = match &node.node_type {
-        AnimationNodeType::Clip(handle) => clips.get_mut(handle),
-        _ => unreachable!(),
-    };
-    clip.unwrap()
-}
-// ──────────────────────────────────────────────────────────────
-// 清理系统：监听动画结束事件并删除实体（官方推荐方式）
-// ──────────────────────────────────────────────────────────────
-fn despawn_finished_click_effects(
-    mut commands: Commands,
-    // mut click: On<OnClick>,
-) {
-    // commands.entity().despawn();
 }
