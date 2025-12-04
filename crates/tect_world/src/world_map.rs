@@ -1,16 +1,16 @@
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
+use tect_assetload::asset_load::*;
 use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
 use tect_state::app_state::*;
-use tect_assetload::asset_load::*;
 
 pub struct WorldScenePlugin;
 
 impl Plugin for WorldScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((MoveControlPlugin, GodViewCameraPlugin))
-            .add_systems(OnEnter(AppState::InGame), setup);
+        app.add_systems(OnEnter(AppState::InGame), setup)
+            .add_plugins((GodViewCameraPlugin, MoveControlPlugin));
     }
 }
 //父
@@ -18,7 +18,7 @@ impl Plugin for WorldScenePlugin {
 fn setup(
     mut commands: Commands,
     cameras: Query<(Entity, &Camera), With<Camera>>,
-    assets: Res<GameAssets>
+    assets: Res<GameAssets>,
 ) {
     //点光源
     // commands.spawn((

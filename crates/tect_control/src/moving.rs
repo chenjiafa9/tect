@@ -58,6 +58,7 @@ pub struct IsMoving;
 
 // 初始化资源
 fn load_click_effect_assets(mut commands: Commands, assets: Res<GameAssets>) {
+    info!("鼠标右键资源配置");
     commands.insert_resource(ClickEffectAssets {
         scene: assets.player_scene.clone(),
         graph: assets.animation_graph.clone(),
@@ -81,6 +82,7 @@ fn mouse_button_system(
     mut player_query: Query<(Entity, &mut Transform, &mut PlayerMove), With<PlayerMove>>,
     mut commands: Commands,
 ) {
+    info!("鼠标按键处理系统");
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
     if *right_mouse_action != RightMouseAction::CharacterMove {
         // 在这里，我们可以处理 CharacterMove 之后的重置，
@@ -110,6 +112,7 @@ fn mouse_button_system(
             player.target_position = Some(target_point);
             mouse_state.target_is_reach = false;
             commands.entity(entity).insert(IsMoving);
+            info!("目标移动位置: {:?}", target_point);
         }
     }
 }
