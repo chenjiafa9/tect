@@ -1,9 +1,9 @@
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
-use std::f32::consts::PI;
 use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
 use tect_state::app_state::*;
+use tect_assetload::asset_load::*;
 
 pub struct WorldScenePlugin;
 
@@ -13,13 +13,12 @@ impl Plugin for WorldScenePlugin {
             .add_systems(OnEnter(AppState::InGame), setup);
     }
 }
-
+//父
 // 初始化测试系统
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    cameras: Query<(Entity, &Camera), With<Camera>>,
+    assets: Res<GameAssets>
 ) {
     //点光源
     // commands.spawn((
@@ -40,6 +39,12 @@ fn setup(
     //     )],
     // ));
 
+    //  清除所有非游戏主相机的相机（包括默认的）
+    for (entity, _camera) in cameras.iter() {
+        commands.entity(entity).despawn();
+        info!("已清除多余相机: {:?}", entity);
+    }
+
     let camera_data = GodViewCamera::default();
 
     // 初始化时，根据默认 Yaw 和 Pitch 计算 Transform
@@ -47,8 +52,6 @@ fn setup(
     let translation = camera_data.focus + rotation * Vec3::new(0.0, 0.0, camera_data.distance);
     // camera
     commands.spawn((
-        // Camera3d::default(),
-        // Transform::from_xyz(0.0, 6.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
         Camera3d::default(),
         Transform {
             translation,
@@ -65,7 +68,7 @@ fn setup(
     ));
     // 角色
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"))),
+        SceneRoot(assets.player_scene.clone()),
         Transform {
             translation: Vec3::new(5.0, 1.0, 2.0),
             ..default()
@@ -77,7 +80,7 @@ fn setup(
     ));
     // 场景
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/simple_map.glb"))),
+        SceneRoot(assets.map.clone()),
         Transform::from_scale(Vec3::splat(1.0)),
         Ground,
     ));

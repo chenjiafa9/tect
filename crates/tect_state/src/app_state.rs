@@ -1,11 +1,12 @@
-use bevy::{prelude::*};
-
+use bevy::prelude::*;
 
 //游戏主状态
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 pub enum AppState {
+    BootLoading, // 第1阶段：启动加载（只加载菜单资源）
+    Menu,        // 主菜单
+    GameLoading, // 第2阶段：点开始游戏后加载（加载角色、关卡等大资源）
     #[default]
-    Menu,
     InGame,
 }
 
@@ -17,12 +18,11 @@ pub enum AppState {
 pub enum MenuOptions {
     #[default]
     NewGame,
-    ContinueGame, 
+    ContinueGame,
     OnlineGame,
     Setting,
-    About
+    About,
 }
-
 
 // --- 共享资源和状态定义 ---
 
@@ -32,10 +32,10 @@ pub enum MenuOptions {
 pub enum RightMouseAction {
     #[default]
     None,
-    PressedJustNow,          // 刚按下，还没决定
-    WaitingForDecision,      // 按住中，还在犹豫
-    CameraDrag,              // 已经判定为拖动
-    CharacterMove,           // 短促点击 → 这一帧要移动角色
+    PressedJustNow,     // 刚按下，还没决定
+    WaitingForDecision, // 按住中，还在犹豫
+    CameraDrag,         // 已经判定为拖动
+    CharacterMove,      // 短促点击 → 这一帧要移动角色
 }
 
 //游戏共享资源与状态注册插件
@@ -44,7 +44,12 @@ pub struct GameStatePlugin;
 impl Plugin for GameStatePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RightMouseAction>()
-           .init_state::<AppState>()
-           .init_state::<MenuOptions>();
+            .init_state::<AppState>()
+            .init_state::<MenuOptions>()
+            .add_systems(Startup, first_enter_game_state);
     }
+}
+
+fn first_enter_game_state(mut next_state: ResMut<NextState<AppState>>) {
+    next_state.set(AppState::BootLoading);
 }

@@ -1,6 +1,7 @@
 ///主菜单界面
 use bevy::prelude::*;
 use tect_state::app_state::*;
+use tect_assetload::asset_load::*;
 
 pub struct MainUiPlugin;
 
@@ -53,8 +54,7 @@ pub struct MenuBkCm {
 ///主菜单渲染
 fn setup_menu(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut next_app_state: ResMut<NextState<AppState>>,
+    boot_asset: Res<BootAssets>,
     mut next_menu_state: ResMut<NextState<MenuOptions>>,
 ) {
     //  生成菜单专用的 2D UI 相机（
@@ -81,28 +81,12 @@ fn setup_menu(
             },
             // BackgroundColor(BG_COLOR),
             Sprite {
-                image: asset_server.load("ui_image/BG2.png"),
+                image: boot_asset.menu_bg.clone(),
                 ..default()
             },
             Name::new("Menu Root"),
         ))
         .with_children(|parent| {
-            // 标题
-            // parent.spawn((
-            //     Text::new("MY AWESOME GAME"),
-            //     TextFont {
-            //         font: asset_server.load("fonts/AlibabaPuHuiTi-3-55-Regular.ttf"), 
-            //         font_size: 80.0,
-            //         ..default()
-            //     },
-            //     TextColor(TEXT_COLOR),
-            //     Node {
-            //         margin: UiRect::bottom(Val::Px(60.0)),
-            //         ..default()
-            //     },
-            //     // 进场动画用
-            // ));
-
             // 半透明毛玻璃主面板
             parent
                 .spawn((
@@ -153,7 +137,6 @@ fn setup_menu(
                             .with_child((
                                 Text::new(label),
                                 TextFont {
-                                    // font: asset_server.load("fonts/AlibabaPuHuiTi-3-55-Regular"),
                                     font_size: 32.0,
                                     ..default()
                                 },
@@ -190,11 +173,11 @@ fn menu_button_system(
 
                 match action {
                     MenuButtonAction::NewGame => {
-                        next_app_state.set(AppState::InGame);
+                        next_app_state.set(AppState::GameLoading);
                     }
                     MenuButtonAction::ContinueGame => {
                         // 加载存档逻辑
-                        next_app_state.set(AppState::InGame);
+                        next_app_state.set(AppState::GameLoading);
                     }
                     MenuButtonAction::OnlineGame => {
                         next_menu_state.set(MenuOptions::OnlineGame);
@@ -222,8 +205,6 @@ fn menu_button_system(
     }
 }
 
-
-
 // ────────────────────────────── 退出菜单：清除 UI + 相机 ──────────────────────────────
 fn cleanup_menu(
     mut commands: Commands,
@@ -239,7 +220,4 @@ fn cleanup_menu(
     for entity in &cameras {
         commands.entity(entity).despawn();
     }
-
-    // 可选：也清除背景图（如果你想更干净）
-    // commands.entity(background).despawn();
 }

@@ -1,14 +1,13 @@
 ///外部使用改移动插件时在需要移动的组件生成时加上PlayerMove，地面组件加上Ground 并应用插件MoveControlPlugin
 use bevy::prelude::*;
-///描述：当前动画的加载与保存以及动画播放存在问题，与bevy0.17官方示例存在区别，且无法清除播放完的动画，动画事件未成功添加
-use std::time::Duration;
+use tect_assetload::asset_load::*;
 use tect_state::app_state::*;
 
 pub struct MoveControlPlugin;
 
 impl Plugin for MoveControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_click_effect_assets)
+        app.add_systems(OnEnter(AppState::InGame), load_click_effect_assets)
             .add_systems(
                 Update,
                 (
@@ -58,22 +57,11 @@ pub struct Ground;
 pub struct IsMoving;
 
 // 初始化资源
-fn load_click_effect_assets(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-) {
-    let scene_handle: Handle<Scene> =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
-
-    let (graph, animation_indices) = AnimationGraph::from_clips([
-        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb"))
-    ]);
-    let graph_handle = graphs.add(graph);
+fn load_click_effect_assets(mut commands: Commands, assets: Res<GameAssets>) {
     commands.insert_resource(ClickEffectAssets {
-        scene: scene_handle.clone(),
-        graph: graph_handle.clone(),
-        click_animation: animation_indices[0],
+        scene: assets.player_scene.clone(),
+        graph: assets.animation_graph.clone(),
+        click_animation: assets.run_animation,
     });
     // 初始化鼠标状态
     commands.insert_resource(MouseState {
@@ -81,7 +69,6 @@ fn load_click_effect_assets(
         target_is_reach: false,
         right_click_position: Vec2::ZERO,
     });
-    commands.spawn(AnimationGraphHandle(graph_handle));
 }
 
 // 鼠标按键处理系统
