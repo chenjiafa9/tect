@@ -1,19 +1,19 @@
-use bevy::{asset::LoadState, prelude::*};
+use bevy::prelude::*;
 use tect_state::app_state::*;
+use tect_state::player::*;
 
 // 启动就必须加载的（体积小，菜单一定用）
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct BootAssets {
     pub ui_font: Handle<Font>,
     pub menu_bg: Handle<Image>,
 }
 
 // 只有真正开始游戏才加载的（体积大，菜单不用）
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct GameAssets {
     pub player_scene: Handle<Scene>,
-    pub animation_graph: Handle<AnimationGraph>,
-    pub run_animation: AnimationNodeIndex,
+    pub player_animations: PlayerAnimations,
     pub map: Handle<Scene>,
 }
 
@@ -114,26 +114,79 @@ fn game_loading_setup(
     let player_handle: Handle<Scene> =
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
 
-    // 构建动画图（只包含跑步动画）
+    // 构建player动画图
     let mut graph = AnimationGraph::new();
-    let clip = asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb"));
-    let run_node = graph.add_clip(clip, 1.0, graph.root);
+    let idle_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let walk_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let run_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let jump_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let attack_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let mining_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let eating_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
+    let death_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset("rola/rola_run_2-22.glb")),
+        1.0,
+        graph.root,
+    );
     let graph_handle = graphs.add(graph);
 
-    // 其他大资源
-    let handles = vec![
-        player_handle.clone().untyped(),
-        asset_server.load_untyped("rola/rola_die.glb").untyped(),
-        // 加你后续的怪物、特效、音乐等
-    ];
-    tracker.total = handles.len();
-    tracker.handles = handles;
+    // 3. 构建 PlayerAnimations 结构体
+    let player_anims = PlayerAnimations {
+        graph: graph_handle.clone(),
+        idle: idle_node,
+        walk: walk_node,
+        run: run_node,
+        jump: jump_node,
+        attack: attack_node,
+        mining: mining_node,
+        eating: eating_node,
+        death: death_node,
+    };
 
-    // 赋值给 GameAssets
+    // 加载地图
+    let map_scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/simple_map.glb"));
+
+    //  进度追踪（把所有大资源都加进去）
+    tracker.handles = vec![
+        player_handle.clone().untyped(),
+        map_scene.clone().untyped(),
+        // 加你其他大资源
+    ];
+
+    // 写入 GameAssets
     game_assets.player_scene = player_handle;
-    game_assets.animation_graph = graph_handle.clone();
-    game_assets.run_animation = run_node;
-    game_assets.map = asset_server.load(GltfAssetLabel::Scene(0).from_asset("scnens/simple_map.glb"));
+    game_assets.player_animations = player_anims;
+    game_assets.map = map_scene;
+
+    tracker.total = tracker.handles.len();
 }
 
 // ──────────────────────────────

@@ -3,10 +3,10 @@ use bevy::prelude::*;
 //游戏主状态
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 pub enum AppState {
+    #[default]
     BootLoading, // 第1阶段：启动加载（只加载菜单资源）
     Menu,        // 主菜单
     GameLoading, // 第2阶段：点开始游戏后加载（加载角色、关卡等大资源）
-    #[default]
     InGame,
 }
 

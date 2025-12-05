@@ -58,11 +58,10 @@ pub struct IsMoving;
 
 // 初始化资源
 fn load_click_effect_assets(mut commands: Commands, assets: Res<GameAssets>) {
-    info!("鼠标右键资源配置");
     commands.insert_resource(ClickEffectAssets {
         scene: assets.player_scene.clone(),
-        graph: assets.animation_graph.clone(),
-        click_animation: assets.run_animation,
+        graph: assets.player_animations.graph.clone(),
+        click_animation: assets.player_animations.run,
     });
     // 初始化鼠标状态
     commands.insert_resource(MouseState {
@@ -82,7 +81,6 @@ fn mouse_button_system(
     mut player_query: Query<(Entity, &mut Transform, &mut PlayerMove), With<PlayerMove>>,
     mut commands: Commands,
 ) {
-    info!("鼠标按键处理系统");
     // 仅当 RightMouseAction 判定为 CharacterMove 时才执行移动逻辑
     if *right_mouse_action != RightMouseAction::CharacterMove {
         // 在这里，我们可以处理 CharacterMove 之后的重置，
@@ -102,6 +100,7 @@ fn mouse_button_system(
         && let Some(distance) =
             ray.intersect_plane(ground.translation(), InfinitePlane3d::new(ground.up()))
     {
+        //保留，为之后生成点击动画或特效时使用
         let point = ray.get_point(distance);
         mouse_state.is_right_clicked = true;
         mouse_state.right_click_position = cursor_position;
@@ -112,7 +111,6 @@ fn mouse_button_system(
             player.target_position = Some(target_point);
             mouse_state.target_is_reach = false;
             commands.entity(entity).insert(IsMoving);
-            info!("目标移动位置: {:?}", target_point);
         }
     }
 }
@@ -135,7 +133,7 @@ fn character_movement_system(
             let distance = direction.length();
             let translation = transform.translation;
 
-            if distance > 0.2 {
+            if distance > 0.3 {
                 let move_vec = direction.normalize() * player.move_speed * time.delta_secs();
                 let look_dir = Vec3::new(move_vec.x, 0.0, move_vec.z).normalize_or_zero();
 
@@ -149,12 +147,12 @@ fn character_movement_system(
 
                 mouse_state.target_is_reach = false;
             } else {
+                // 移除 IsMoving → 动画系统会暂停动画
+                commands.entity(entity).remove::<IsMoving>();
+                info!("IsMoving已移除");
                 // 到达目标
                 player.target_position = None;
                 mouse_state.target_is_reach = true;
-
-                // 移除 IsMoving → 动画系统会暂停动画
-                commands.entity(entity).remove::<IsMoving>();
             }
         }
     }
@@ -164,22 +162,19 @@ fn character_movement_system(
 // 关键：根据 IsMoving 组件控制动画播放/暂停
 // ========================
 fn control_run_animation_system(
-    effect_assets: Res<ClickEffectAssets>,
+    assets: Res<GameAssets>,
     moving_query: Query<(), With<IsMoving>>, // 玩家根有 IsMoving
-    mut player_query: Query<&mut AnimationPlayer>,
+    mut player_query: Query<(Entity, &mut AnimationPlayer), With<PlayerMove>>,
 ) {
     let should_play = !moving_query.is_empty();
-    for mut player in player_query.iter_mut() {
+    info!("{:?}", should_play);
+    for (_entity, mut player) in player_query.iter_mut() {
         if should_play {
             // 正在移动 → 播放跑步动画（只 play 一次，避免重复触发）
-            if player.animation(effect_assets.click_animation).is_none() {
-                player.play(effect_assets.click_animation).repeat();
-            }
+            player.play(assets.player_animations.walk).repeat();
         } else {
             // 停止移动 → 暂停或清空动画（推荐暂停，更自然）
-            if player.animation(effect_assets.click_animation).is_some() {
-                player.stop(effect_assets.click_animation);
-            }
+            player.stop(assets.player_animations.walk);
         }
     }
 }

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use tect_assetload::asset_load::*;
 use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
-use tect_state::app_state::*;
+use tect_state::{app_state::*, player::PlayerStats};
 
 pub struct WorldScenePlugin;
 
@@ -66,9 +66,21 @@ fn setup(
         },
         camera_data,
     ));
-    // 角色
+
+    // 场景
     commands.spawn((
-        SceneRoot(assets.player_scene.clone()),
+        SceneRoot(assets.map.clone()),
+        Transform::from_scale(Vec3::splat(1.0)),
+        Ground,
+    ));
+    // 角色
+    spawn_player(commands, assets);
+}
+
+// 生成玩家
+fn spawn_player(mut commands: Commands, game_assets: Res<GameAssets>) {
+    commands.spawn((
+        SceneRoot(game_assets.player_scene.clone()),
         Transform {
             translation: Vec3::new(5.0, 1.0, 2.0),
             ..default()
@@ -77,11 +89,8 @@ fn setup(
             move_speed: 2.0,
             target_position: None,
         },
-    ));
-    // 场景
-    commands.spawn((
-        SceneRoot(assets.map.clone()),
-        Transform::from_scale(Vec3::splat(1.0)),
-        Ground,
+        AnimationGraphHandle(game_assets.player_animations.graph.clone()),
+        PlayerStats::default(),
+        Name::new("Player"),
     ));
 }
