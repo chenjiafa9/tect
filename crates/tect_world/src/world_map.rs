@@ -82,7 +82,7 @@ fn spawn_player(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands.spawn((
         SceneRoot(game_assets.player_scene.clone()),
         Transform {
-            translation: Vec3::new(5.0, 1.0, 2.0),
+            translation: Vec3::new(5.0, 0.0, 2.0),
             ..default()
         },
         PlayerMove {

@@ -164,17 +164,19 @@ fn character_movement_system(
 fn control_run_animation_system(
     assets: Res<GameAssets>,
     moving_query: Query<(), With<IsMoving>>, // 玩家根有 IsMoving
-    mut player_query: Query<(Entity, &mut AnimationPlayer), With<PlayerMove>>,
+    mut anim_query: Query<&mut AnimationPlayer>,
 ) {
-    let should_play = !moving_query.is_empty();
-    info!("{:?}", should_play);
-    for (_entity, mut player) in player_query.iter_mut() {
-        if should_play {
-            // 正在移动 → 播放跑步动画（只 play 一次，避免重复触发）
-            player.play(assets.player_animations.walk).repeat();
+    let is_moving = !moving_query.is_empty();
+    for mut player in &mut anim_query {
+        let target_clip = if is_moving {
+            assets.player_animations.run // 你想播放哪个就换哪个
         } else {
-            // 停止移动 → 暂停或清空动画（推荐暂停，更自然）
-            player.stop(assets.player_animations.walk);
+            assets.player_animations.idle
+        };
+
+        // 关键：只有当目标剪辑不是当前播放的，才切换（避免重复 play）
+        if !player.is_playing_animation(target_clip) {
+            player.play(target_clip).repeat();
         }
     }
 }
