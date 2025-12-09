@@ -1,5 +1,6 @@
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
+use bevy::scene::SceneInstanceReady;
 use tect_assetload::asset_load::*;
 use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
@@ -10,7 +11,8 @@ pub struct WorldScenePlugin;
 impl Plugin for WorldScenePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(AppState::InGame), setup)
-            .add_plugins((GodViewCameraPlugin, MoveControlPlugin));
+            .add_plugins((GodViewCameraPlugin, MoveControlPlugin))
+            .add_observer(on_player_scene_loaded);
     }
 }
 //父
@@ -79,18 +81,53 @@ fn setup(
 
 // 生成玩家
 fn spawn_player(mut commands: Commands, game_assets: Res<GameAssets>) {
-    commands.spawn((
-        SceneRoot(game_assets.player_scene.clone()),
-        Transform {
-            translation: Vec3::new(5.0, 0.0, 2.0),
-            ..default()
-        },
-        PlayerMove {
-            move_speed: 2.0,
-            target_position: None,
-        },
-        AnimationGraphHandle(game_assets.player_animations.graph.clone()),
-        PlayerStats::default(),
-        Name::new("Player"),
-    ));
+    let player_root = commands
+        .spawn((
+            Transform {
+                translation: Vec3::new(5.0, 0.0, 2.0),
+                ..default()
+            },
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            PlayerMove {
+                move_speed: 4.0,
+                target_position: None,
+            },
+            PlayerStats::default(),
+            Name::new("PlayerRoot"),
+        ))
+        .id();
+
+    // 用 with_children + SceneBundle + 监听 SceneInstanceReady
+    commands.entity(player_root).with_children(|parent| {
+        parent
+            .spawn((SceneRoot(game_assets.player_scene.clone())))
+            // 关键：监听场景加载完成事件
+            .observe(on_player_scene_loaded);
+    });
+}
+
+// 当玩家 GLTF 场景完全加载完毕（包括 AnimationPlayer 生成）后触发
+fn on_player_scene_loaded(
+    trigger: On<SceneInstanceReady>,
+    mut commands: Commands,
+    game_assets: Res<GameAssets>,
+    children: Query<&Children>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    let scene_entity = trigger.entity;
+
+    // 递归找到这个场景下的 AnimationPlayer
+    for child in children.iter_descendants(scene_entity) {
+        if let Ok(mut player) = players.get_mut(child) {
+            // 插入 AnimationGraphHandle（必须！）
+            commands.entity(child).insert(AnimationGraphHandle(
+                game_assets.player_animations.graph.clone(),
+            ));
+
+            // 立即播放 idle 动画
+            player.play(game_assets.player_animations.run).repeat();
+        }
+    }
 }

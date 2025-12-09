@@ -168,15 +168,21 @@ fn control_run_animation_system(
 ) {
     let is_moving = !moving_query.is_empty();
     for mut player in &mut anim_query {
-        let target_clip = if is_moving {
-            assets.player_animations.run // 你想播放哪个就换哪个
-        } else {
-            assets.player_animations.idle
-        };
+        // let target_clip = if is_moving {
+        //     assets.player_animations.run // 你想播放哪个就换哪个
+        // } else {
+        //     assets.player_animations.idle
+        // };
 
-        // 关键：只有当目标剪辑不是当前播放的，才切换（避免重复 play）
-        if !player.is_playing_animation(target_clip) {
-            player.play(target_clip).repeat();
+        // // 关键：只有当目标剪辑不是当前播放的，才切换（避免重复 play）
+        // if !player.is_playing_animation(target_clip) {
+        //     player.play(target_clip).repeat();
+        // }
+        //上述代码在多动画时很有用，现在只有一个有效动画直接开始或暂停
+        if is_moving {
+            player.play(assets.player_animations.run);
+        }else{
+            player.stop(assets.player_animations.run);
         }
     }
 }
