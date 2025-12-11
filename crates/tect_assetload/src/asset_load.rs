@@ -15,6 +15,7 @@ pub struct GameAssets {
     pub player_scene: Handle<Scene>,
     pub player_animations: PlayerAnimations,
     pub map: Handle<Scene>,
+    pub ui_placeholder_icon: Handle<Image>,
 }
 
 // 加载进度通用追踪器
@@ -114,6 +115,8 @@ fn game_loading_setup(
     let player_handle: Handle<Scene> =
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("rola/rola_run_2-22.glb"));
 
+    let ui_placeholder_icon: Handle<Image> = asset_server.load("ui/icon.png");
+
     // 构建player动画图
     let mut graph = AnimationGraph::new();
     let idle_node = graph.add_clip(
@@ -178,14 +181,14 @@ fn game_loading_setup(
     tracker.handles = vec![
         player_handle.clone().untyped(),
         map_scene.clone().untyped(),
-        // 加你其他大资源
+        ui_placeholder_icon.clone().untyped(), // 加你其他大资源
     ];
 
     // 写入 GameAssets
     game_assets.player_scene = player_handle;
     game_assets.player_animations = player_anims;
     game_assets.map = map_scene;
-
+    game_assets.ui_placeholder_icon = ui_placeholder_icon;
     tracker.total = tracker.handles.len();
 }
 

@@ -4,6 +4,7 @@ use bevy::scene::SceneInstanceReady;
 use tect_assetload::asset_load::*;
 use tect_camera::god_view_camera::{calculate_rotation, GodViewCamera, GodViewCameraPlugin};
 use tect_control::moving::{Ground, MoveControlPlugin, PlayerMove};
+use tect_control::object_interaction::{ObjectInteractionPlugin,PlayerTool};
 use tect_state::{app_state::*, player::PlayerStats};
 
 pub struct WorldScenePlugin;
@@ -11,7 +12,11 @@ pub struct WorldScenePlugin;
 impl Plugin for WorldScenePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(AppState::InGame), setup)
-            .add_plugins((GodViewCameraPlugin, MoveControlPlugin))
+            .add_plugins((
+                GodViewCameraPlugin,
+                MoveControlPlugin,
+                ObjectInteractionPlugin,
+            ))
             .add_observer(on_player_scene_loaded);
     }
 }
@@ -74,6 +79,7 @@ fn setup(
         SceneRoot(assets.map.clone()),
         Transform::from_scale(Vec3::splat(1.0)),
         Ground,
+        Pickable::IGNORE //避免被选中
     ));
     // 角色
     spawn_player(commands, assets);
@@ -96,6 +102,7 @@ fn spawn_player(mut commands: Commands, game_assets: Res<GameAssets>) {
             },
             PlayerStats::default(),
             Name::new("PlayerRoot"),
+            PlayerTool::default(),
         ))
         .id();
 

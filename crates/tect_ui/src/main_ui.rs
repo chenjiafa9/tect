@@ -1,13 +1,15 @@
+use crate::hotbar::*;
 ///主菜单界面
 use bevy::prelude::*;
-use tect_state::app_state::*;
 use tect_assetload::asset_load::*;
+use tect_state::app_state::*;
 
 pub struct MainUiPlugin;
 
 impl Plugin for MainUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::Menu), setup_menu)
+        app.add_plugins(HotbarPlugin)
+            .add_systems(OnEnter(AppState::Menu), setup_menu)
             .add_systems(Update, menu_button_system.run_if(in_state(AppState::Menu)))
             .add_systems(OnExit(AppState::Menu), cleanup_menu);
     }
