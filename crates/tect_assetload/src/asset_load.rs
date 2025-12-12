@@ -55,7 +55,10 @@ impl Plugin for SmartLoadingPlugin {
             )
             .add_systems(
                 OnExit(AppState::BootLoading),
-                (enter_menu, cleanup_loading_ui),
+                (
+                    // enter_menu,
+                     cleanup_loading_ui
+                    ),
             )
             // 第2阶段：游戏资源加载（从 Menu 点击「开始游戏」触发）
             .add_systems(OnEnter(AppState::GameLoading), game_loading_setup)
@@ -65,7 +68,10 @@ impl Plugin for SmartLoadingPlugin {
             )
             .add_systems(
                 OnExit(AppState::GameLoading),
-                (enter_ingame, cleanup_loading_ui),
+                (
+                    // enter_ingame,
+                     cleanup_loading_ui
+                    ),
             );
     }
 }

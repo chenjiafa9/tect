@@ -216,11 +216,13 @@ fn cleanup_menu(
     // 删除主菜单面板（会递归删除所有子节点）
     for entity in &roots {
         commands.entity(entity).despawn();
+         info!("主菜单ui已清除")
     }
 
     // 删除菜单专用相机
     for entity in &cameras {
         commands.entity(entity).despawn();
+        info!("主菜单相机已清除")
     }
-    info!("主菜单ui已清除")
+   
 }
