@@ -72,6 +72,7 @@ fn setup(
             ..default()
         },
         camera_data,
+        MeshPickingCamera,//相机拾取标记，只拾取带有Pickable标记的实体
     ));
 
     // 场景
@@ -79,7 +80,7 @@ fn setup(
         SceneRoot(assets.map.clone()),
         Transform::from_scale(Vec3::splat(1.0)),
         Ground,
-        Pickable::IGNORE //避免被选中
+        // Pickable::IGNORE //避免被选中
     ));
     // 角色
     spawn_player(commands, assets);
@@ -109,7 +110,7 @@ fn spawn_player(mut commands: Commands, game_assets: Res<GameAssets>) {
     // 用 with_children + SceneBundle + 监听 SceneInstanceReady
     commands.entity(player_root).with_children(|parent| {
         parent
-            .spawn((SceneRoot(game_assets.player_scene.clone())))
+            .spawn(SceneRoot(game_assets.player_scene.clone()))
             // 关键：监听场景加载完成事件
             .observe(on_player_scene_loaded);
     });

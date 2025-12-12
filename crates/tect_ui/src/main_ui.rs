@@ -16,7 +16,7 @@ impl Plugin for MainUiPlugin {
 }
 
 // ui_style.rs 或直接放在文件顶部
-const BG_COLOR: Color = Color::srgb(0.05, 0.05, 0.12);
+// const BG_COLOR: Color = Color::srgb(0.05, 0.05, 0.12);
 const PANEL_COLOR: Color = Color::srgba(0.1, 0.1, 0.2, 0.92);
 const NORMAL_BUTTON: Color = Color::srgba(0.15, 0.15, 0.35, 0.8);
 const HOVER_BUTTON: Color = Color::srgba(0.25, 0.75, 0.95, 0.9);
@@ -222,4 +222,5 @@ fn cleanup_menu(
     for entity in &cameras {
         commands.entity(entity).despawn();
     }
+    info!("主菜单ui已清除")
 }

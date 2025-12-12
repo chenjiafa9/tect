@@ -9,6 +9,7 @@ tect_ui = { path = "../tect_ui", version = "0.1.0", default-features = false }
 tect_world = { path = "../tect_world", version = "0.1.0", default-features = false }
 tect_state = { path = "../tect_state", version = "0.1.0", default-features = false }
 tect_assetload = { path = "../tect_assetload", version = "0.1.0", default-features = false }
+bevy-inspector-egui = "0.35"
 
 [lints]
 workspace = true

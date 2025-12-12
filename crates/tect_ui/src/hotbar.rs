@@ -64,8 +64,7 @@ fn spawn_hotbar(mut commands: Commands, assets: Res<GameAssets>) {
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
             BorderColor::all(Color::WHITE),
             Name::new("Hotbar Root"),
-            Pickable::IGNORE,
-            PickingBlocker,
+            // Pickable::IGNORE,
         ))
         .with_children(|parent| {
             for i in 0..10 {
@@ -84,6 +83,7 @@ fn spawn_hotbar(mut commands: Commands, assets: Res<GameAssets>) {
                         BorderColor::all(Color::WHITE.with_alpha(0.3)),
                         HotbarSlot { index: i },
                         Name::new(format!("Hotbar Slot {}", i + 1)),
+                        Pickable::default(),
                     ))
                     .with_children(|p| {
                         p.spawn(Sprite::from_image(assets.ui_placeholder_icon.clone()));

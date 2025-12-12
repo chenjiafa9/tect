@@ -317,5 +317,6 @@ fn spawn_loading_ui(commands: &mut Commands, title: &str, bg_color: Color) {
 fn cleanup_loading_ui(mut commands: Commands, query: Query<Entity, With<LoadingRoot>>) {
     for e in query.iter() {
         commands.entity(e).despawn();
+        info!("加载ui已清除")
     }
 }

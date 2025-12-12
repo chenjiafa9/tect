@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 use tect_assetload::asset_load::SmartLoadingPlugin;
 use tect_state::app_state::*;
 use tect_ui::main_ui::*;
@@ -13,6 +14,8 @@ pub fn run() {
             }),
             ..default()
         }))
+        .add_plugins(EguiPlugin::default()) //调试界面插件
+        .add_plugins(WorldInspectorPlugin::new()) //调试界面插件
         .add_plugins(GameStatePlugin)
         .add_plugins(SmartLoadingPlugin)
         .add_plugins(MainUiPlugin)

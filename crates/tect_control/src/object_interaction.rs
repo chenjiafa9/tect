@@ -1,14 +1,14 @@
 //! 完全独立于 RightMouseAction 的左键交互系统
 //! 左键 = 砍树 / 放置物品（由工具 + 快捷栏决定）
 //! 右键只负责相机和移动，不参与任何交互
-use bevy::ecs::message::signal_message_update_system;
+use bevy::ecs::message::message_update_system;
 // use bevy::ecs::event::event_update_system;
 use bevy::pbr::wireframe::{Wireframe, WireframeConfig, WireframePlugin};
 use bevy::pbr::StandardMaterial; // 新增：用于半透明预览
 use bevy::picking::backend::PointerHits;
-use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::picking::pointer::PointerId;
 use bevy::picking::pointer::PointerInteraction;
+use bevy::picking::DefaultPickingPlugins;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 use tect_assetload::asset_load::GameAssets;
@@ -76,6 +76,10 @@ impl Plugin for ObjectInteractionPlugin {
                 default_color: Color::from(Srgba::rgb(1.0, 1.0, 0.0)),
                 ..default()
             })
+            .insert_resource(MeshPickingSettings {
+                require_markers: true,
+                ..default()
+            })
             .init_resource::<InteractionConfig>()
             .init_resource::<SelectedPlaceable>()
             .add_systems(OnEnter(AppState::InGame), setup) //测试系统
@@ -88,10 +92,6 @@ impl Plugin for ObjectInteractionPlugin {
                     debug_picking,
                 )
                     .run_if(in_state(AppState::InGame)),
-            )
-            .add_systems(
-                PreUpdate,
-                filter_blocked_picking_hits.before(signal_message_update_system(PointerHits)),
             );
     }
 }
@@ -109,6 +109,8 @@ fn setup(
             MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
             Transform::from_xyz(0.0, 0.5, 0.0),
             Name::new("Test Cube 1"),
+            Pickable::default(),
+            Destructible,
         ))
         .id();
 
@@ -119,6 +121,8 @@ fn setup(
             MeshMaterial3d(materials.add(Color::srgb_u8(20, 50, 255))),
             Transform::from_xyz(2.0, 0.5, 3.0),
             Name::new("Test Cube 2"),
+            Pickable::default(),
+            Destructible,
         ))
         .id();
     info!("测试实体1ID::{:?} 实体2ID: {:?}", ent1, ent2);
@@ -328,55 +332,5 @@ fn left_click_interaction_system(
             // 可选：消耗一个物品（发事件给背包系统）
             // commands.trigger(ConsumeItem { item_id: selected.id });
         }
-    }
-}
-
-/// 自定义事件：请求阻挡 UI 的 Picking 传播
-#[derive(Event, Clone, Copy, Debug, Message)]
-pub struct BlockPickingPropagation {
-    pub pointer: PointerId,
-}
-
-/// 标记：此 UI 实体需要阻挡 3D Picking 射线
-#[derive(Component, Default)]
-pub struct UiPickingBlocker;
-
-/// 核心系统：在 PreUpdate 阶段拦截并阻断 UI 的 Picking 事件
-fn block_ui_picking(
-    blocker_query: Query<(Entity, &UiPickingBlocker)>,
-    mut block_events: MessageWriter<BlockPickingPropagation>,
-    pointers: Query<&PointerId>,
-) {
-    // 为所有指针发送阻挡请求（只要有 UI 阻挡器存在）
-    if !blocker_query.is_empty() {
-        for &pointer in &pointers {
-            block_events.write(BlockPickingPropagation { pointer });
-        }
-    }
-}
-
-// 真正拦截 Picking 事件的系统（必须在 PointerHits 事件更新前运行）
-fn filter_blocked_picking_hits(
-    mut pointer_hits: MessageReader<PointerHits>,
-    mut block_events: MessageReader<BlockPickingPropagation>,
-    blocker_query: Query<Entity, With<UiPickingBlocker>>,
-) {
-    // 收集所有需要阻挡的指针
-    let blocked_pointers: HashSet<_> = block_events.read().map(|e| e.pointer).collect();
-
-    // 过滤掉所有指向 UI 阻挡器的击中
-    for hits in pointer_hits.read() {
-        if blocked_pointers.contains(&hits.pointer) {
-            // 如果击中的是 UI 阻挡器，清除所有后续 3D 击中
-            for (entity, _) in hits.picks.clone() {
-                if blocker_query.contains(entity) {
-                    // 直接消耗事件，不传播
-                    continue;
-                }
-            }
-        }
-
-        // 正常传播非 UI 的击中
-        // （这里不需要手动转发，Bevy 会自动处理剩余事件）
     }
 }

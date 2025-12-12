@@ -63,6 +63,7 @@ argh = "0.1.12"
 thiserror = "2.0"
 anyhow = "1"
 bevy = { version = "0.17" }
+bevy-inspector-egui = "0.35"
 
 
 [dev-dependencies]
