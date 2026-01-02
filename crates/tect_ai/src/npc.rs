@@ -249,6 +249,8 @@ pub fn visualize_npc_paths(
     mut gizmos: Gizmos,
     npc_query: Query<(&Transform, &Npc), With<Npc>>,
 ) {
+    use bevy::color::palettes::css;
+    
     for (transform, npc) in npc_query.iter() {
         if npc.current_path.is_empty() {
             continue;
@@ -257,14 +259,14 @@ pub fn visualize_npc_paths(
         // 绘制路径线
         let mut prev_point = transform.translation;
         for point in &npc.current_path {
-            gizmos.line(prev_point, *point, bevy::color::palettes::css::YELLOW);
-            gizmos.sphere(*point, 0.2, bevy::color::palettes::css::RED);
+            gizmos.line(prev_point, *point, css::YELLOW);
+            gizmos.sphere(Isometry3d::from_translation(*point), 0.2, css::RED);
             prev_point = *point;
         }
 
         // 高亮当前目标点
         if let Some(current_target) = npc.current_target() {
-            gizmos.sphere(current_target, 0.3, bevy::color::palettes::css::GREEN);
+            gizmos.sphere(Isometry3d::from_translation(current_target), 0.3, css::GREEN);
         }
     }
 }
