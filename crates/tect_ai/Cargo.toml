@@ -1,0 +1,9 @@
+[package]
+name = "tect_ai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.15", default-features = false, features = [
+    "bevy_gizmos",
+] }
